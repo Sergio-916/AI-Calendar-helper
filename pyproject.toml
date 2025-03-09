@@ -1,0 +1,26 @@
+[project]
+name = "telegram_bot"
+version = "0.1.0"
+description = "Телеграм бот с интеграцией Google Calendar и OpenAI"
+authors = [
+    {name = "s.shpak"}
+]
+dependencies = [
+    "python-telegram-bot==21.11.1",
+    "google-auth-oauthlib==1.2.1",
+    "google-auth-httplib2==0.2.0",
+    "google-api-python-client==2.163.0",
+    "openai==1.65.5",
+    "python-dotenv==1.0.1"
+]
+requires-python = ">=3.8"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"] 
