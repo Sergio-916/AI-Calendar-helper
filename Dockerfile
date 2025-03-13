@@ -1,15 +1,24 @@
-FROM python:3.10-slim
+# Use official lightweight Python image
+FROM python:3.11-slim
 
+# Set the working directory inside the container
 WORKDIR /app
 
-# Копируем файлы зависимостей
-COPY requirements.txt .
+# Install uv package manager
+RUN pip install --no-cache-dir uv
 
-# Устанавливаем зависимости
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy dependency files first (for caching optimization)
+COPY pyproject.toml .
+COPY uv.lock .
 
-# Копируем остальные файлы проекта
+# Install dependencies using uv (explicitly specifying the lock file)
+RUN uv pip install --system --no-cache -r uv.lock
+
+# Copy the rest of the project files
 COPY . .
 
-# Запускаем бота
-CMD ["python", "bot.py"]
+# Set environment variables (optional)
+ENV PYTHONUNBUFFERED=1
+
+# Command to run the bot
+CMD ["python", "src/bot.py"]

@@ -17,10 +17,10 @@ from telegram.ext import (
     ContextTypes,
     CallbackQueryHandler,
 )
-from .models import CalendarEvent, EventAttachment
-from .calendar_service import GoogleCalendarService
-from .openai_service import OpenAIService
-from .logger_config import setup_logger, archive_old_logs
+from models import CalendarEvent, EventAttachment, RecurrenceInfo
+from calendar_service import GoogleCalendarService
+from openai_service import OpenAIService
+from logger_config import setup_logger, archive_old_logs
 from typing import Dict, List, Optional, Tuple, Any
 
 # Загрузка переменных окружения
@@ -49,7 +49,6 @@ BOT_COMMANDS = [
     BotCommand("help", "Показать справку"),
     BotCommand("events", "Показать ближайшие события"),
     BotCommand("summary", "Создать сводку событий за день"),
-    BotCommand("create", "Создать новое событие"),
     BotCommand("settings", "Настройки бота"),
 ]
 
@@ -131,28 +130,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/help - Показать это сообщение\n"
         "/events - Показать ближайшие события\n"
         "/summary - Создать сводку событий за день\n"
-        "/create - Создать новое событие\n"
         "/settings - Настройки бота"
     )
     await update.message.reply_text(help_text)
-
-
-async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработчик команды /create - интерактивное создание события"""
-    keyboard = [
-        [InlineKeyboardButton("Обычное событие", callback_data="create_regular")],
-        [
-            InlineKeyboardButton(
-                "Повторяющееся событие", callback_data="create_recurring"
-            )
-        ],
-        [InlineKeyboardButton("Отмена", callback_data="cancel_creation")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await update.message.reply_text(
-        "Выберите тип события, которое хотите создать:", reply_markup=reply_markup
-    )
 
 
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -223,11 +203,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     """Обработчик текстовых сообщений"""
     user_id = update.effective_user.id
     text = update.message.text
-
-    # Проверяем, находится ли пользователь в процессе создания события
-    if user_id in user_data and "creation_step" in user_data[user_id]:
-        await handle_creation_step(update, context, user_id, text)
-        return
 
     # Стандартная обработка текстовых сообщений
     processing_message = await update.message.reply_text(
@@ -302,290 +277,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(message, reply_markup=reply_markup)
 
 
-async def handle_creation_step(
-    update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, text: str
-) -> None:
-    """Обрабатывает шаги интерактивного создания события"""
-    step = user_data[user_id]["creation_step"]
-    is_recurring = user_data[user_id].get("is_recurring", False)
-
-    if step == "title":
-        # Сохраняем название события
-        user_data[user_id]["title"] = text
-        user_data[user_id]["creation_step"] = "date"
-
-        await update.message.reply_text(
-            "Введите дату и время начала события (например, 25.03.2025 15:30):"
-        )
-
-    elif step == "date":
-        try:
-            # Пытаемся распарсить дату
-            date_formats = [
-                "%d.%m.%Y %H:%M",
-                "%d.%m.%Y",
-                "%d/%m/%Y %H:%M",
-                "%d/%m/%Y",
-                "%Y-%m-%d %H:%M",
-                "%Y-%m-%d",
-            ]
-
-            start_time = None
-            for date_format in date_formats:
-                try:
-                    if " " in date_format and " " in text:
-                        start_time = datetime.strptime(text, date_format)
-                    elif " " not in date_format and " " not in text:
-                        # Если формат без времени, устанавливаем время на 9:00
-                        start_time = datetime.strptime(text, date_format).replace(
-                            hour=9, minute=0
-                        )
-
-                    if start_time:
-                        break
-                except ValueError:
-                    continue
-
-            if not start_time:
-                raise ValueError("Не удалось распарсить дату")
-
-            # Добавляем часовой пояс
-            start_time = start_time.replace(tzinfo=UTC)
-
-            # Сохраняем дату начала
-            user_data[user_id]["start_time"] = start_time
-            user_data[user_id]["creation_step"] = "duration"
-
-            await update.message.reply_text(
-                "Введите продолжительность события в часах (например, 1.5):"
-            )
-
-        except ValueError:
-            await update.message.reply_text(
-                "Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ ЧЧ:ММ:"
-            )
-
-    elif step == "duration":
-        try:
-            # Пытаемся распарсить продолжительность
-            duration = float(text.replace(",", "."))
-
-            # Вычисляем время окончания
-            start_time = user_data[user_id]["start_time"]
-            hours = int(duration)
-            minutes = int((duration - hours) * 60)
-            end_time = start_time + timedelta(hours=hours, minutes=minutes)
-
-            # Сохраняем время окончания
-            user_data[user_id]["end_time"] = end_time
-            user_data[user_id]["creation_step"] = "location"
-
-            await update.message.reply_text(
-                "Введите место проведения события (или '-' если его нет):"
-            )
-
-        except ValueError:
-            await update.message.reply_text(
-                "Неверный формат продолжительности. Пожалуйста, введите число (например, 1.5):"
-            )
-
-    elif step == "location":
-        # Сохраняем место проведения
-        if text != "-":
-            user_data[user_id]["location"] = text
-
-        # Если событие повторяющееся, запрашиваем информацию о повторении
-        if is_recurring:
-            user_data[user_id]["creation_step"] = "recurrence_frequency"
-
-            keyboard = [
-                [InlineKeyboardButton("Ежедневно", callback_data="recurrence_daily")],
-                [
-                    InlineKeyboardButton(
-                        "Еженедельно", callback_data="recurrence_weekly"
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "Ежемесячно", callback_data="recurrence_monthly"
-                    )
-                ],
-                [InlineKeyboardButton("Ежегодно", callback_data="recurrence_yearly")],
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
-            await update.message.reply_text(
-                "Выберите частоту повторения:", reply_markup=reply_markup
-            )
-        else:
-            user_data[user_id]["creation_step"] = "description"
-            await update.message.reply_text(
-                "Введите описание события (или '-' если его нет):"
-            )
-
-    elif step == "recurrence_interval":
-        try:
-            # Пытаемся распарсить интервал
-            interval = int(text)
-
-            if interval < 1:
-                raise ValueError("Интервал должен быть положительным числом")
-
-            # Сохраняем интервал
-            user_data[user_id]["recurrence"]["interval"] = interval
-
-            # Запрашиваем количество повторений или дату окончания
-            user_data[user_id]["creation_step"] = "recurrence_end"
-
-            keyboard = [
-                [
-                    InlineKeyboardButton(
-                        "Без ограничения", callback_data="recurrence_no_end"
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "Указать количество", callback_data="recurrence_count"
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "Указать дату окончания", callback_data="recurrence_until"
-                    )
-                ],
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
-            await update.message.reply_text(
-                "Выберите, когда должны закончиться повторения:",
-                reply_markup=reply_markup,
-            )
-
-        except ValueError:
-            await update.message.reply_text(
-                "Неверный формат интервала. Пожалуйста, введите целое положительное число:"
-            )
-
-    elif step == "recurrence_count":
-        try:
-            # Пытаемся распарсить количество повторений
-            count = int(text)
-
-            if count < 1:
-                raise ValueError(
-                    "Количество повторений должно быть положительным числом"
-                )
-
-            # Сохраняем количество повторений
-            user_data[user_id]["recurrence"]["count"] = count
-
-            # Переходим к описанию
-            user_data[user_id]["creation_step"] = "description"
-            await update.message.reply_text(
-                "Введите описание события (или '-' если его нет):"
-            )
-
-        except ValueError:
-            await update.message.reply_text(
-                "Неверный формат количества повторений. Пожалуйста, введите целое положительное число:"
-            )
-
-    elif step == "recurrence_until":
-        try:
-            # Пытаемся распарсить дату окончания
-            date_formats = ["%d.%m.%Y", "%d/%m/%Y", "%Y-%m-%d"]
-
-            until_date = None
-            for date_format in date_formats:
-                try:
-                    until_date = datetime.strptime(text, date_format)
-                    if until_date:
-                        break
-                except ValueError:
-                    continue
-
-            if not until_date:
-                raise ValueError("Не удалось распарсить дату")
-
-            # Устанавливаем время на конец дня и добавляем часовой пояс
-            until_date = until_date.replace(hour=23, minute=59, second=59, tzinfo=UTC)
-
-            # Проверяем, что дата окончания позже даты начала
-            if until_date <= user_data[user_id]["start_time"]:
-                await update.message.reply_text(
-                    "Дата окончания должна быть позже даты начала. Пожалуйста, введите корректную дату:"
-                )
-                return
-
-            # Сохраняем дату окончания
-            user_data[user_id]["recurrence"]["until"] = until_date
-
-            # Переходим к описанию
-            user_data[user_id]["creation_step"] = "description"
-            await update.message.reply_text(
-                "Введите описание события (или '-' если его нет):"
-            )
-
-        except ValueError:
-            await update.message.reply_text(
-                "Неверный формат даты. Пожалуйста, введите дату в формате ДД.ММ.ГГГГ:"
-            )
-
-    elif step == "description":
-        # Сохраняем описание
-        if text != "-":
-            user_data[user_id]["description"] = text
-
-        # Создаем событие
-        from .models import CalendarEvent, RecurrenceInfo
-
-        # Получаем данные события
-        title = user_data[user_id]["title"]
-        start_time = user_data[user_id]["start_time"]
-        end_time = user_data[user_id].get("end_time")
-        location = user_data[user_id].get("location")
-        description = user_data[user_id].get("description")
-
-        # Создаем объект RecurrenceInfo, если это повторяющееся событие
-        recurrence = None
-        if is_recurring and "recurrence" in user_data[user_id]:
-            recurrence_data = user_data[user_id]["recurrence"]
-            recurrence = RecurrenceInfo(
-                frequency=recurrence_data.get("frequency", "WEEKLY"),
-                interval=recurrence_data.get("interval", 1),
-                days=recurrence_data.get("days"),
-                until=recurrence_data.get("until"),
-                count=recurrence_data.get("count"),
-            )
-
-        # Создаем объект CalendarEvent
-        event = CalendarEvent(
-            summary=title,
-            description=description,
-            start_time=start_time,
-            end_time=end_time,
-            location=location,
-            recurrence=recurrence,
-        )
-
-        # Сохраняем событие во временных данных пользователя
-        user_data[user_id] = {"event": event}
-
-        # Показываем предпросмотр события
-        keyboard = [
-            [
-                InlineKeyboardButton("Да", callback_data="confirm_event"),
-                InlineKeyboardButton("Отмена", callback_data="cancel_event"),
-            ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        event_details = format_event_details(event)
-        await update.message.reply_text(
-            f"Создать следующее событие?\n\n{event_details}", reply_markup=reply_markup
-        )
-
-
 def format_event_details(event: CalendarEvent) -> str:
     """Форматирует детали события для отображения"""
     details = f"Заголовок: {event.summary}\n"
@@ -656,9 +347,13 @@ def format_event_details(event: CalendarEvent) -> str:
             details += f" по {days_str}"
 
         # Добавляем информацию о дате окончания или количестве повторений
-        if event.recurrence.until:
-            details += f" до {event.recurrence.until.strftime('%d.%m.%Y')}"
-        elif event.recurrence.count:
+        if hasattr(event.recurrence, "until") and event.recurrence.until:
+            try:
+                until_date = datetime.fromisoformat(event.recurrence.until)
+                details += f" до {until_date.strftime('%d.%m.%Y')}"
+            except (ValueError, TypeError):
+                details += f" до {event.recurrence.until}"
+        elif hasattr(event.recurrence, "count") and event.recurrence.count:
             details += f", {event.recurrence.count} раз"
 
         details += "\n"
@@ -800,6 +495,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """Обработчик документов/файлов"""
     user_id = update.effective_user.id
     document = update.message.document
+    caption = update.message.caption  # Получаем подпись к файлу
 
     if not document:
         await update.message.reply_text("Файл не найден.")
@@ -815,15 +511,38 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         file_id=file_id, file_name=file_name, file_type=file_type
     )
 
-    # Создаем базовое событие
-    now = datetime.now(UTC)
-    event = CalendarEvent(
-        summary=f"Файл: {file_name}",
-        description=f"Файл отправлен {now.strftime('%d.%m.%Y %H:%M')}",
-        start_time=now,
-        end_time=now.replace(hour=now.hour + 1),
-        attachments=[attachment],
-    )
+    # Если есть подпись к файлу, используем OpenAI для извлечения информации о событии
+    if caption:
+        events = openai_service.extract_event_info(caption)
+        if events:
+            event = events[0]
+            # Добавляем вложение к событию
+            if event.attachments is None:
+                event.attachments = []
+            event.attachments.append(attachment)
+            # Добавляем информацию о файле в описание
+            file_info = f"\n\nПрикреплённый файл: {file_name}"
+            event.description = (event.description or "") + file_info
+        else:
+            # Если не удалось извлечь информацию, создаем базовое событие
+            now = datetime.now(UTC)
+            event = CalendarEvent(
+                summary=caption,
+                description=f"Прикреплённый файл: {file_name}",
+                start_time=now.isoformat(),
+                end_time=now.replace(hour=now.hour + 1).isoformat(),
+                attachments=[attachment],
+            )
+    else:
+        # Если нет подписи, создаем базовое событие
+        now = datetime.now(UTC)
+        event = CalendarEvent(
+            summary=f"Файл: {file_name}",
+            description=f"Прикреплённый файл: {file_name}",
+            start_time=now.isoformat(),
+            end_time=now.replace(hour=now.hour + 1).isoformat(),
+            attachments=[attachment],
+        )
 
     # Сохраняем событие во временных данных пользователя
     user_data[user_id] = {"event": event}
@@ -840,7 +559,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text(
         f"Создать событие с файлом в календаре?\n\n"
         f"Заголовок: {event.summary}\n"
-        f"Время: {format_datetime(event.start_time)}\n"
+        f"Время: с {format_datetime(event.start_time)}"
+        f"{' по ' + format_datetime(event.end_time) if event.end_time else ''}\n"
         f"Файл: {file_name}",
         reply_markup=reply_markup,
     )
@@ -951,37 +671,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         await query.edit_message_text(message)
 
-    # Обработка команды создания события
-    elif callback_data == "create_regular":
-        # Запрашиваем название события
-        user_data[user_id] = {"creation_step": "title"}
-        await query.edit_message_text("Введите название события:")
-
-    elif callback_data == "create_recurring":
-        # Запрашиваем название повторяющегося события
-        user_data[user_id] = {"creation_step": "title", "is_recurring": True}
-        await query.edit_message_text("Введите название повторяющегося события:")
-
-    # Обработка настроек повторяющихся событий
-    elif callback_data == "recurrence_no_end":
-        # Без ограничения по времени
-        user_data[user_id]["creation_step"] = "description"
-        await query.edit_message_text(
-            "Введите описание события (или '-' если его нет):"
-        )
-
-    elif callback_data == "recurrence_count":
-        # Запрашиваем количество повторений
-        user_data[user_id]["creation_step"] = "recurrence_count"
-        await query.edit_message_text("Введите количество повторений:")
-
-    elif callback_data == "recurrence_until":
-        # Запрашиваем дату окончания
-        user_data[user_id]["creation_step"] = "recurrence_until"
-        await query.edit_message_text(
-            "Введите дату окончания повторений (например, 31.12.2025):"
-        )
-
     # Обработка настроек
     elif callback_data == "settings_timezone":
         await query.edit_message_text(
@@ -1026,7 +715,6 @@ def main() -> None:
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("create", create_command))
     application.add_handler(CommandHandler("settings", settings_command))
     application.add_handler(CommandHandler("events", events_command))
     application.add_handler(CommandHandler("summary", summary_command))
