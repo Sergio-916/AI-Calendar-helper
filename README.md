@@ -1,137 +1,137 @@
-# Telegram-бот для Google Calendar
+# Telegram Bot for Google Calendar
 
-Этот бот позволяет создавать события в Google Calendar через Telegram. Он может обрабатывать текстовые сообщения, аудиозаписи и файлы, добавляя их в календарь в структурированном виде. Бот использует OpenAI API для извлечения информации о событиях из текста и преобразования голосовых сообщений в текст.
+This bot allows you to create events in Google Calendar through Telegram. It can process text messages, audio recordings, and files, adding them to the calendar in a structured manner. The bot uses the OpenAI API to extract event information from text and convert voice messages to text.
 
-## Возможности
+## Features
 
-- Создание событий в Google Calendar из текстовых сообщений с автоматическим извлечением информации
-- Преобразование голосовых сообщений в текст и создание событий на их основе
-- Прикрепление аудиозаписей и файлов к событиям
-- Просмотр ближайших событий в календаре
-- Создание сводок событий за день
-- Структурированное хранение данных с использованием Pydantic
-- Контейнеризация с помощью Docker
+- Create events in Google Calendar from text messages with automatic information extraction
+- Convert voice messages to text and create events based on them
+- Attach audio recordings and files to events
+- View upcoming events in the calendar
+- Create daily event summaries
+- Structured data storage using Pydantic
+- Containerization with Docker
 
-## Настройка
+## Setup
 
-### 1. Создание Telegram бота
+### 1. Create a Telegram Bot
 
-1. Откройте Telegram и найдите [@BotFather](https://t.me/BotFather)
-2. Отправьте команду `/newbot` и следуйте инструкциям
-3. Получите токен бота и сохраните его
+1. Open Telegram and find [@BotFather](https://t.me/BotFather)
+2. Send the command `/newbot` and follow the instructions
+3. Obtain the bot token and save it
 
-### 2. Настройка Google Calendar API
+### 2. Set Up Google Calendar API
 
-1. Перейдите в [Google Cloud Console](https://console.cloud.google.com/)
-2. Создайте новый проект
-3. Включите Google Calendar API
-4. Создайте учетные данные OAuth 2.0
-5. Скачайте JSON-файл с учетными данными и сохраните его как `credentials.json` в корневой папке проекта
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project
+3. Enable the Google Calendar API
+4. Create OAuth 2.0 credentials
+5. Download the JSON file with the credentials and save it as `credentials.json` in the root folder of the project
 
-### 3. Получение API ключа OpenAI
+### 3. Obtain OpenAI API Key
 
-1. Зарегистрируйтесь или войдите в [OpenAI Platform](https://platform.openai.com/)
-2. Перейдите в раздел API Keys
-3. Создайте новый API ключ и сохраните его
+1. Register or log in to [OpenAI Platform](https://platform.openai.com/)
+2. Go to the API Keys section
+3. Create a new API key and save it
 
-### 4. Настройка переменных окружения
+### 4. Set Up Environment Variables
 
-1. Скопируйте файл `.env.example` в `.env`
-2. Заполните переменные окружения:
+1. Copy the `.env.example` file to `.env`
+2. Fill in the environment variables:
    ```
    TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
    OPENAI_API_KEY=your_openai_api_key_here
    ```
 
-## Запуск
+## Running
 
-### Локальный запуск
+### Local Run
 
-1. Установите зависимости:
-   ```
+1. Install dependencies:
+   ```sh
    pip install -r requirements.txt
    ```
 
-2. Запустите бота:
-   ```
+2. Run the bot:
+   ```sh
    python bot.py
    ```
 
-### Запуск с помощью Docker
+### Run with Docker
 
-1. Соберите и запустите контейнер:
-   ```
+1. Build and run the container:
+   ```sh
    docker-compose up -d
    ```
 
-2. Для просмотра логов:
-   ```
+2. To view logs:
+   ```sh
    docker-compose logs -f
    ```
 
-## Использование
+## Usage
 
-1. **Создание события из текста**:
-   - Отправьте боту текстовое сообщение с описанием события
-   - Бот автоматически извлечет информацию о событии с помощью OpenAI
-   - Подтвердите создание события, нажав на кнопку "Да"
+1. **Create an event from text**:
+   - Send a text message with the event description to the bot
+   - The bot will automatically extract event information using OpenAI
+   - Confirm the creation of the event by clicking "Yes"
 
-2. **Создание события из голосового сообщения**:
-   - Отправьте боту голосовое сообщение
-   - Бот преобразует его в текст с помощью OpenAI и извлечет информацию о событии
-   - Подтвердите создание события, нажав на кнопку "Да"
+2. **Create an event from a voice message**:
+   - Send a voice message to the bot
+   - The bot will convert it to text using OpenAI and extract event information
+   - Confirm the creation of the event by clicking "Yes"
 
-3. **Создание события с файлом**:
-   - Отправьте боту любой файл
-   - Бот предложит создать событие с прикрепленным файлом
-   - Подтвердите создание события, нажав на кнопку "Да"
+3. **Create an event with a file**:
+   - Send any file to the bot
+   - The bot will suggest creating an event with the attached file
+   - Confirm the creation of the event by clicking "Yes"
 
-4. **Просмотр ближайших событий**:
-   - Отправьте команду `/events`
-   - Бот покажет список ближайших событий в вашем календаре
+4. **View upcoming events**:
+   - Send the command `/events`
+   - The bot will show a list of upcoming events in your calendar
 
-5. **Создание сводки событий**:
-   - Отправьте команду `/summary`
-   - Бот создаст сводку событий за день с помощью OpenAI
+5. **Create a daily event summary**:
+   - Send the command `/summary`
+   - The bot will create a daily event summary using OpenAI
 
-## Команды бота
+## Bot Commands
 
-- `/start` - Начать работу с ботом
-- `/help` - Показать справку
-- `/events` - Показать ближайшие события
-- `/summary` - Создать сводку событий за день
+- `/start` - Start working with the bot
+- `/help` - Show help
+- `/events` - Show upcoming events
+- `/summary` - Create a daily event summary
 
-## Примеры использования
+## Usage Examples
 
-### Текстовое сообщение
+### Text Message
 
-Отправьте боту сообщение:
+Send the bot a message:
 ```
-Встреча с клиентом завтра в 15:00 в офисе на Ленина 10. Обсудить новый проект и подготовить презентацию.
-```
-
-Бот извлечет информацию о событии:
-- Название: Встреча с клиентом
-- Дата и время: завтра в 15:00
-- Место: офис на Ленина 10
-- Описание: Обсудить новый проект и подготовить презентацию
-
-### Голосовое сообщение
-
-Отправьте боту голосовое сообщение с текстом:
-```
-Напомни мне позвонить маме в субботу в 12 часов дня
+Meeting with a client tomorrow at 3:00 PM at the office on Lenin 10. Discuss the new project and prepare a presentation.
 ```
 
-Бот преобразует аудио в текст и извлечет информацию о событии:
-- Название: Позвонить маме
-- Дата и время: суббота, 12:00
-- Описание: Напоминание о звонке
+The bot will extract event information:
+- Title: Meeting with a client
+- Date and time: tomorrow at 3:00 PM
+- Location: office on Lenin 10
+- Description: Discuss the new project and prepare a presentation
 
-## Дальнейшее развитие
+### Voice Message
 
-- Улучшение распознавания структурированной информации из текста
-- Добавление напоминаний о событиях
-- Интеграция с другими календарными сервисами
-- Поддержка повторяющихся событий
-- Улучшение пользовательского интерфейса с использованием инлайн-кнопок 
+Send the bot a voice message with the text:
+```
+Remind me to call mom on Saturday at 12 PM
+```
+
+The bot will convert the audio to text and extract event information:
+- Title: Call mom
+- Date and time: Saturday, 12:00 PM
+- Description: Reminder to call
+
+## Future Development
+
+- Improve recognition of structured information from text
+- Add event reminders
+- Integrate with other calendar services
+- Support recurring events
+- Improve the user interface with inline buttons
