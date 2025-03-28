@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class EventAttachment(BaseModel):
-    """Модель для вложений к событию"""
+    """Model for event attachments"""
 
     file_id: str
     file_name: str
@@ -13,35 +13,35 @@ class EventAttachment(BaseModel):
 
 
 class RecurrenceInfo(BaseModel):
-    """Модель для информации о повторении события"""
+    """Model for event recurrence information"""
 
     frequency: str  # DAILY, WEEKLY, MONTHLY, YEARLY
-    interval: Optional[int] = None  # Интервал повторения (каждые N дней/недель/месяцев)
+    interval: Optional[int] = None  # Recurrence interval (every N days/weeks/months)
     days: Optional[List[str]] = (
-        None  # Дни недели для повторения (MO, TU, WE, TH, FR, SA, SU)
+        None  # Days of the week for recurrence (MO, TU, WE, TH, FR, SA, SU)
     )
-    until: Optional[str] = None  # Дата окончания повторений в формате YYYY-MM-DD
-    count: Optional[int] = None  # Количество повторений
+    until: Optional[str] = None  # End date of recurrence in YYYY-MM-DD format
+    count: Optional[int] = None  # Number of recurrences
 
 
 class CalendarEvent(BaseModel):
-    """Модель для события календаря"""
+    """Model for calendar event"""
 
     summary: str
     description: Optional[str] = None
-    start_time: str  # Время начала в формате ISO (YYYY-MM-DDTHH:MM:SS)
-    end_time: Optional[str] = None  # Время окончания в формате ISO
+    start_time: str  # Start time in ISO format (YYYY-MM-DDTHH:MM:SS)
+    end_time: Optional[str] = None  # End time in ISO format
     location: Optional[str] = None
     attachments: Optional[List[EventAttachment]] = None
     recurrence: Optional[RecurrenceInfo] = None
 
     def to_google_event(self) -> dict:
-        """Преобразует модель в формат события Google Calendar"""
-        # Используем один часовой пояс для всех дат
+        """Converts the model to Google Calendar event format"""
+        # Use one timezone for all dates
         timezone = "America/Argentina/Buenos_Aires"
 
         try:
-            # Преобразуем строки в объекты datetime
+            # Convert strings to datetime objects
             start_datetime = datetime.fromisoformat(self.start_time)
 
             event = {
@@ -61,7 +61,7 @@ class CalendarEvent(BaseModel):
                     "timeZone": timezone,
                 }
             else:
-                # Если конечное время не указано, устанавливаем его на час позже начала
+                # If end time is not specified, set it to one hour after the start
                 end_time = (
                     start_datetime.replace(hour=start_datetime.hour + 1)
                 ).isoformat()
@@ -73,44 +73,44 @@ class CalendarEvent(BaseModel):
             if self.location:
                 event["location"] = self.location
 
-            # Добавляем информацию о повторении события
+            # Add recurrence information
             if self.recurrence:
                 recurrence_rule = ["RRULE:"]
 
-                # Частота повторения
+                # Recurrence frequency
                 recurrence_rule.append(f"FREQ={self.recurrence.frequency}")
 
-                # Интервал повторения
+                # Recurrence interval
                 if (
                     self.recurrence.interval is not None
                     and self.recurrence.interval > 1
                 ):
                     recurrence_rule.append(f"INTERVAL={self.recurrence.interval}")
 
-                # Дни недели для повторения
+                # Days of the week for recurrence
                 if self.recurrence.days:
                     days_str = ",".join(self.recurrence.days)
                     recurrence_rule.append(f"BYDAY={days_str}")
 
-                # Дата окончания повторений
+                # End date of recurrence
                 if self.recurrence.until:
-                    # Преобразуем строку даты в формат для RRULE
+                    # Convert date string to RRULE format
                     until_date = datetime.fromisoformat(
                         self.recurrence.until.replace("-", "")
                     )
                     until_str = until_date.strftime("%Y%m%dT%H%M%SZ")
                     recurrence_rule.append(f"UNTIL={until_str}")
 
-                # Количество повторений
+                # Number of recurrences
                 if self.recurrence.count:
                     recurrence_rule.append(f"COUNT={self.recurrence.count}")
 
-                # Добавляем правило повторения в событие
+                # Add recurrence rule to the event
                 event["recurrence"] = [";".join(recurrence_rule)]
 
-            # Добавляем информацию о вложениях в описание
+            # Add attachment information to the description
             if self.attachments:
-                attachment_text = "\n\nВложения:\n"
+                attachment_text = "\n\nAttachments:\n"
                 for attachment in self.attachments:
                     attachment_text += (
                         f"- {attachment.file_name} ({attachment.file_type})"
@@ -126,7 +126,7 @@ class CalendarEvent(BaseModel):
 
             return event
         except Exception as e:
-            # В случае ошибки возвращаем базовое событие
+            # In case of error, return a basic event
             return {
                 "summary": self.summary,
                 "description": self.description,

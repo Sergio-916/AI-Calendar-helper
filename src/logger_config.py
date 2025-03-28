@@ -9,28 +9,28 @@ from pathlib import Path
 
 def archive_old_logs():
     """
-    Архивирует старые логи в отдельные файлы с датой в имени файла.
-    Ищет записи с датами в логах и создает отдельные файлы для каждого дня.
+    Archives old logs into separate files with date in the filename.
+    Looks for entries with dates in the logs and creates separate files for each day.
     """
-    # Создаем директорию для архивных логов, если она не существует
+    # Create directory for archived logs if it doesn't exist
     archive_dir = Path("./data/logs_archive")
     archive_dir.mkdir(parents=True, exist_ok=True)
 
-    # Путь к основному лог-файлу
+    # Path to the main log file
     log_file = Path("./data/bot.log")
 
-    # Проверяем, существует ли лог-файл
+    # Check if the log file exists
     if not log_file.exists():
-        logging.warning(f"Лог-файл {log_file} не найден.")
+        logging.warning(f"Log file {log_file} not found.")
         return
 
-    # Словарь для хранения логов по датам
+    # Dictionary to store logs by date
     logs_by_date = {}
 
-    # Регулярное выражение для извлечения даты из строки лога
+    # Regular expression to extract date from log line
     date_pattern = re.compile(r"(\d{4}-\d{2}-\d{2}) \d{2}:\d{2}:\d{2}")
 
-    # Читаем лог-файл и группируем записи по датам
+    # Read the log file and group entries by date
     try:
         with open(log_file, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -41,54 +41,54 @@ def archive_old_logs():
                         logs_by_date[date_str] = []
                     logs_by_date[date_str].append(line)
     except Exception as e:
-        logging.error(f"Ошибка при чтении лог-файла: {e}")
+        logging.error(f"Error reading log file: {e}")
         return
 
-    # Текущая дата
+    # Current date
     today = datetime.datetime.now().strftime("%Y-%m-%d")
 
-    # Записываем логи в отдельные файлы по датам (кроме сегодняшних)
+    # Write logs to separate files by date (except today's logs)
     for date_str, logs in logs_by_date.items():
-        # Пропускаем сегодняшние логи
+        # Skip today's logs
         if date_str == today:
             continue
 
-        # Создаем имя файла с датой
+        # Create filename with date
         archive_file = archive_dir / f"bot_log_{date_str}.log"
 
-        # Записываем логи в файл
+        # Write logs to file
         try:
             with open(archive_file, "w", encoding="utf-8", errors="replace") as f:
                 f.writelines(logs)
-            logging.info(f"Архивированы логи за {date_str} в файл {archive_file}")
+            logging.info(f"Archived logs for {date_str} to file {archive_file}")
         except Exception as e:
-            logging.error(f"Ошибка при архивировании логов за {date_str}: {e}")
+            logging.error(f"Error archiving logs for {date_str}: {e}")
 
-    # Создаем новый лог-файл только с сегодняшними логами
+    # Create new log file with only today's logs
     try:
         if today in logs_by_date:
             with open(log_file, "w", encoding="utf-8", errors="replace") as f:
                 f.writelines(logs_by_date[today])
-            logging.info(f"Лог-файл обновлен, оставлены только записи за {today}")
+            logging.info(f"Log file updated, kept only entries for {today}")
         else:
-            # Если сегодняшних логов нет, создаем пустой файл
+            # If there are no today's logs, create empty file
             with open(log_file, "w", encoding="utf-8") as f:
                 pass
-            logging.info("Создан пустой лог-файл (сегодняшних логов не найдено)")
+            logging.info("Created empty log file (no today's logs found)")
     except Exception as e:
-        logging.error(f"Ошибка при обновлении лог-файла: {e}")
+        logging.error(f"Error updating log file: {e}")
 
 
 def setup_logger(name=None):
     """
-    Настраивает и возвращает логгер с заданными параметрами.
-    Если имя не указано, настраивает корневой логгер.
+    Sets up and returns a logger with specified parameters.
+    If no name is provided, configures the root logger.
     """
-    # Создаем директорию для логов, если она не существует
+    # Create directory for logs if it doesn't exist
     os.makedirs("./data", exist_ok=True)
     log_file = "./data/bot.log"
 
-    # Создаем обработчик для записи в файл с ротацией
+    # Create handler for file writing with rotation
     file_handler = RotatingFileHandler(
         log_file,
         maxBytes=1024 * 1024 * 5,  # 5 MB
@@ -96,14 +96,14 @@ def setup_logger(name=None):
         encoding="utf-8",
     )
 
-    # Настраиваем форматирование логов
+    # Configure log formatting
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     file_handler.setFormatter(formatter)
 
-    # Если имя не указано, настраиваем корневой логгер
+    # If no name is provided, configure the root logger
     if name is None:
         logging.basicConfig(
             level=logging.INFO,
@@ -112,15 +112,15 @@ def setup_logger(name=None):
         )
         logger = logging.getLogger()
     else:
-        # Иначе создаем и настраиваем именованный логгер
+        # Otherwise create and configure a named logger
         logger = logging.getLogger(name)
         logger.setLevel(logging.INFO)
 
-        # Проверяем, есть ли уже обработчики у логгера
+        # Check if the logger already has handlers
         if not logger.handlers:
             logger.addHandler(file_handler)
 
-        # Отключаем передачу сообщений родительскому логгеру
+        # Disable propagation of messages to parent logger
         logger.propagate = False
 
     return logger

@@ -6,25 +6,25 @@ from openai import OpenAI
 from models import CalendarEvent, RecurrenceInfo, EventAttachment
 from logger_config import setup_logger
 
-# Получаем настроенный логгер
+# Get configured logger
 logger = setup_logger("openai_service")
 
 
 class OpenAIService:
-    """Сервис для работы с OpenAI API"""
+    """Service for working with OpenAI API"""
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             logger.warning(
-                "API ключ OpenAI не найден. Функции извлечения информации будут недоступны."
+                "OpenAI API key not found. Information extraction functions will be unavailable."
             )
         self.client = OpenAI(api_key=self.api_key) if self.api_key else None
 
     def extract_event_info(self, text: str) -> List[CalendarEvent]:
-        """Извлекает информацию о событиях из текста с помощью OpenAI API"""
+        """Extracts information about events from text using OpenAI API"""
         if not self.client:
-            logger.error("API ключ OpenAI не настроен")
+            logger.error("OpenAI API key not configured")
             return []
 
         try:
@@ -32,43 +32,45 @@ class OpenAIService:
             current_date = datetime.now().date()
             current_weekday = datetime.now().strftime("%A")
 
-            # Создаем системный промпт с инструкциями
+            # Create system prompt with instructions
             system_prompt = f"""
-            Ты - помощник, который извлекает структурированную информацию о событиях из текста.
-            Ты должен быть особенно внимателен к датам, времени и повторяющимся событиям.
+            You are an assistant who extracts structured information about events from text.
+            You should be particularly attentive to dates, times, and recurring events.
             
-            Правила обработки дат:
-            1. Сегодняшний день недели: {current_weekday}
-            2. Если указан день недели, например "вск", "пн" и т.д, считай, что это ближайший день недели на текущей неделе или на следующей
-            3. Если год не указан явно, используй текущий год: {current_year}
-            4. Все даты должны быть в формате YYYY-MM-DDTHH:MM:SS (строка ISO формата)
-            5. Если указан только месяц и день, используй {current_year} как год
-            6. Если указан день недели, рассчитай дату относительно {current_date}
+            Date processing rules:
+            1. Today's day of the week: {current_weekday}
+            2. If a day of the week is specified, such as "Sun", "Mon", etc., consider it to be the nearest day of the week in the current or next week
+            3. If the year is not explicitly specified, use the current year: {current_year}
+            4. All dates should be in YYYY-MM-DDTHH:MM:SS format (ISO format string)
+            5. If only month and day are specified, use {current_year} as the year
+            6. If a day of the week is specified, calculate the date relative to {current_date}
           
-            Правила обработки повторяющихся событий:
-            1. Если событие повторяется каждую неделю, укажи frequency: "WEEKLY", interval: 1
-            2. Если событие повторяется в определенные дни недели, укажи их в поле days
-            3. Используй коды дней недели: MO, TU, WE, TH, FR, SA, SU
-            4. Если указана дата окончания повторений, укажи ее в поле until в формате YYYY-MM-DD
+            Rules for processing recurring events:
+            1. If an event repeats every week, specify frequency: "WEEKLY", interval: 1
+            2. If an event repeats on specific days of the week, specify them in the days field
+            3. Use day codes: MO, TU, WE, TH, FR, SA, SU
+            4. If an end date for repetitions is specified, indicate it in the until field in YYYY-MM-DD format
             
-            Верни результат в формате JSON с полями:
-            - summary: название события (обязательно)
-            - description: описание события (опционально)
-            - start_time: время начала в формате ISO (обязательно)
-            - end_time: время окончания в формате ISO (опционально)
-            - location: место проведения (опционально)
-            - recurrence: информация о повторении (опционально)
-              - frequency: частота повторения (DAILY, WEEKLY, MONTHLY, YEARLY)
-              - interval: интервал повторения (число)
-              - days: дни недели для повторения (массив строк: MO, TU, WE, TH, FR, SA, SU)
-              - until: дата окончания повторений в формате YYYY-MM-DD
-              - count: количество повторений (число)
+            Return the result in JSON format with the following fields:
+            - summary: event title (required)
+            - description: event description (optional)
+            - start_time: start time in ISO format (required)
+            - end_time: end time in ISO format (optional)
+            - location: event location (optional)
+            - recurrence: recurrence information (optional)
+              - frequency: recurrence frequency (DAILY, WEEKLY, MONTHLY, YEARLY)
+              - interval: recurrence interval (number)
+              - days: days of the week for recurrence (array of strings: MO, TU, WE, TH, FR, SA, SU)
+              - until: end date of recurrences in YYYY-MM-DD format
+              - count: number of recurrences (number)
             """
 
-            # Создаем пользовательский промпт с текстом для анализа
-            user_prompt = f"Извлеки информацию о событиях из следующего текста: {text}"
+            # Create user prompt with text for analysis
+            user_prompt = (
+                f"Extract information about events from the following text: {text}"
+            )
 
-            # Используем метод chat.completions.create с JSON форматом ответа
+            # Use chat.completions.create method with JSON response format
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
@@ -78,27 +80,27 @@ class OpenAIService:
                 response_format={"type": "json_object"},
             )
 
-            # Получаем результат в виде JSON строки
+            # Get result as JSON string
             result_json = response.choices[0].message.content
-            logger.info(f"Получен ответ от OpenAI: {result_json}")
+            logger.info(f"Received response from OpenAI: {result_json}")
 
-            # Парсим JSON
+            # Parse JSON
             try:
                 event_data = json.loads(result_json)
 
-                # Проверяем, что получен словарь
+                # Check that we received a dictionary
                 if not isinstance(event_data, dict):
-                    logger.error(f"Неверный формат ответа от OpenAI: {event_data}")
+                    logger.error(f"Invalid response format from OpenAI: {event_data}")
                     return []
 
-                # Проверяем обязательные поля
+                # Check required fields
                 if "summary" not in event_data or "start_time" not in event_data:
                     logger.error(
-                        f"В ответе отсутствуют обязательные поля: {event_data}"
+                        f"Required fields missing in the response: {event_data}"
                     )
                     return []
 
-                # Создаем объект RecurrenceInfo, если есть данные о повторении
+                # Create RecurrenceInfo object if recurrence data exists
                 recurrence = None
                 if "recurrence" in event_data and event_data["recurrence"]:
                     recurrence_data = event_data["recurrence"]
@@ -110,7 +112,7 @@ class OpenAIService:
                         count=recurrence_data.get("count"),
                     )
 
-                # Создаем список вложений, если они есть
+                # Create list of attachments if they exist
                 attachments = []
                 if "attachments" in event_data and event_data["attachments"]:
                     for attachment_data in event_data["attachments"]:
@@ -122,9 +124,9 @@ class OpenAIService:
                         )
                         attachments.append(attachment)
 
-                # Создаем объект CalendarEvent
+                # Create CalendarEvent object
                 event = CalendarEvent(
-                    summary=event_data.get("summary", "Событие без названия"),
+                    summary=event_data.get("summary", "Event without title"),
                     description=event_data.get("description"),
                     start_time=event_data.get("start_time"),
                     end_time=event_data.get("end_time"),
@@ -133,23 +135,23 @@ class OpenAIService:
                     recurrence=recurrence,
                 )
 
-                # Возвращаем список с одним событием
+                # Return list with one event
                 return [event]
             except json.JSONDecodeError as e:
-                logger.error(f"Ошибка при парсинге JSON: {e}, ответ: {result_json}")
+                logger.error(f"Error parsing JSON: {e}, response: {result_json}")
                 return []
             except Exception as e:
-                logger.error(f"Ошибка при создании объекта CalendarEvent: {e}")
+                logger.error(f"Error creating CalendarEvent object: {e}")
                 return []
 
         except Exception as e:
-            logger.error(f"Ошибка при извлечении информации о событиях: {e}")
+            logger.error(f"Error extracting event information: {e}")
             return []
 
     def transcribe_audio(self, audio_file_path: str) -> str:
-        """Преобразует аудио в текст с помощью OpenAI API"""
+        """Converts audio to text using OpenAI API"""
         if not self.client:
-            logger.error("API ключ OpenAI не настроен")
+            logger.error("OpenAI API key not configured")
             return ""
 
         try:
@@ -159,50 +161,50 @@ class OpenAIService:
                 )
 
             logger.info(
-                f"Аудио успешно преобразовано в текст: {transcription.text[:50]}..."
+                f"Audio successfully converted to text: {transcription.text[:50]}..."
             )
             return transcription.text
 
         except Exception as e:
-            logger.error(f"Ошибка при преобразовании аудио в текст: {e}")
+            logger.error(f"Error converting audio to text: {e}")
             return ""
 
     def generate_daily_summary(self, events: List[Any]) -> str:
-        """Генерирует сводку событий за день"""
+        """Generates a summary of events for the day"""
         if not self.client or not events:
-            return "Нет событий для создания сводки."
+            return "No events to create a summary for."
 
         try:
-            # Формируем текст с событиями, учитывая разные типы объектов
+            # Form text with events, considering different object types
             events_text = []
             for event in events:
                 if isinstance(event, dict):
-                    # Если это словарь из Google Calendar API
-                    title = event.get("summary", "Событие без названия")
-                    description = event.get("description", "Без описания")
+                    # If it's a dictionary from Google Calendar API
+                    title = event.get("summary", "Event without title")
+                    description = event.get("description", "No description")
                     events_text.append(f"- {title}: {description}")
                 else:
-                    # Если это объект CalendarEvent
+                    # If it's a CalendarEvent object
                     title = (
                         event.summary
                         if hasattr(event, "summary")
-                        else "Событие без названия"
+                        else "Event without title"
                     )
                     description = (
                         event.description
                         if hasattr(event, "description")
-                        else "Без описания"
+                        else "No description"
                     )
-                    events_text.append(f"- {title}: {description or 'Без описания'}")
+                    events_text.append(f"- {title}: {description or 'No description'}")
 
             events_text_str = "\n".join(events_text)
 
             prompt = f"""
-            Создай краткую сводку следующих событий за день:
+            Create a brief summary of the following events for the day:
             
             {events_text_str}
             
-            Сводка должна быть информативной и лаконичной.
+            The summary should be informative and concise.
             """
 
             response = self.client.chat.completions.create(
@@ -210,16 +212,16 @@ class OpenAIService:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Ты - помощник, который создает краткие и информативные сводки событий.",
+                        "content": "You are an assistant who creates brief and informative event summaries.",
                     },
                     {"role": "user", "content": prompt},
                 ],
             )
 
             summary = response.choices[0].message.content
-            logger.info(f"Сгенерирована сводка событий: {summary[:50]}...")
+            logger.info(f"Generated event summary: {summary[:50]}...")
             return summary
 
         except Exception as e:
-            logger.error(f"Ошибка при генерации сводки: {e}")
-            return "Не удалось создать сводку событий."
+            logger.error(f"Error generating summary: {e}")
+            return "Failed to create event summary."
