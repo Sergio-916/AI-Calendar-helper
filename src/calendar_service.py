@@ -11,18 +11,27 @@ from models import CalendarEvent
 from logger_config import setup_logger
 from google.oauth2.service_account import Credentials
 
-# Настраиваем логгер
+# Получаем настроенный логгер
 logger = setup_logger("calendar_service")
-# Если изменить эти области, удалите файл token.pickle
+
+# Определяем области доступа
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 
 class GoogleCalendarService:
     """Сервис для работы с Google Calendar API"""
 
-    def __init__(self, credentials_file="credentials.json", token_file="token.pickle"):
-        self.credentials_file = credentials_file
-        self.token_file = token_file
+    def __init__(self):
+        # Получаем путь к директории src
+        src_dir = os.path.dirname(os.path.abspath(__file__))
+        # Получаем путь к корневой директории проекта (на уровень выше src)
+        root_dir = os.path.dirname(src_dir)
+
+        # Устанавливаем пути к файлам
+        self.credentials_file = os.path.join(root_dir, "credentials.json")
+        self.token_file = os.path.join(root_dir, "token.pickle")
+
+        self.creds = None
         self.service = None
 
     def authenticate(self):

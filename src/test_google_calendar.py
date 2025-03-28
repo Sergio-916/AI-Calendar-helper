@@ -27,7 +27,9 @@ def test_google_calendar():
         else:
             print("Getting new credentials...")
             flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
-            creds = flow.run_local_server(port=0)
+            creds = flow.run_local_server(
+                port=0, access_type="offline", prompt="consent"
+            )
 
         # Сохраняем учетные данные для следующего запуска
         print("Saving credentials to token.pickle...")
